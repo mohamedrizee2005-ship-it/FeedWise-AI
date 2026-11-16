@@ -19,8 +19,11 @@ Dimitrios Kotzias, Misha Denil, Nando de Freitas and Padhraic Smyth, **From Grou
 - License: Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
 - The source provides 3,000 positive/negative sentences from Amazon, Yelp and IMDb. FeedWise normalizes/deduplicates text and uses 2,979 additional unique examples as supplementary general sentiment, not university-specific feedback.
 
-Raw downloaded corpora remain in an ignored training cache. Source hashes, row counts, exclusions, split and evaluation are retained in `docs/model-evaluation.json`. The numerical model is a learned derivative; original data/annotations are credited to the authors above. Diagnostic parity strings are authored examples, not redistributed student reviews.
+Raw downloaded corpora remain in an ignored training cache. Source hashes, row counts, exclusions, split and evaluation are retained in `training/evaluation.json`. The numerical model is a learned derivative; original data/annotations are credited to the authors above. Diagnostic parity strings are authored examples, not redistributed student reviews.
 
-## Frameworks
+## Dependencies
 
-React, Vinext, Vite, Cloudflare tooling, Drizzle, scikit-learn and the other dependencies retain their upstream licenses. The vendored Sites Vite integration has its license at `scripts/vite/sites-vite-plugin.LICENSE`. Dependency lockfiles identify the installed packages; installing this project does not transfer their copyrights to its author.
+React, Vite, Lucide, TypeScript and scikit-learn retain their upstream licenses.
+The package lockfile identifies the JavaScript dependencies. Dataset authors
+retain the rights to their comments and annotations; FeedWise does not claim
+authorship of those datasets.

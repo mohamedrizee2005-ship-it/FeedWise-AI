@@ -1,48 +1,12 @@
-import { test, beforeEach } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
-import { handleAPI, digest } from "../lib/service.mjs";
-import { predict, predictRaw, topics, toCSV } from "../lib/inference.mjs";
+import { openDatabase } from "../server/database.mjs";
+import { handleAPI } from "../server/service.mjs";
+import { predict, predictRaw, topics, toCSV } from "../server/inference.mjs";
 
-function database() {
-  const sqlite = new DatabaseSync(":memory:");
-  sqlite.exec("PRAGMA foreign_keys=ON");
-  for (const file of readdirSync(new URL("../drizzle/", import.meta.url))
-    .filter((f) => f.endsWith(".sql"))
-    .sort())
-    sqlite.exec(
-      readFileSync(new URL("../drizzle/" + file, import.meta.url), "utf8"),
-    );
-  const prepare = (sql) => ({
-    bind(...args) {
-      return {
-        first: async () => sqlite.prepare(sql).get(...args) ?? null,
-        all: async () => ({ results: sqlite.prepare(sql).all(...args) }),
-        run: async () => sqlite.prepare(sql).run(...args),
-        _sql: sql,
-        _args: args,
-      };
-    },
-  });
-  return {
-    prepare,
-    batch: async (statements) => {
-      sqlite.exec("BEGIN");
-      try {
-        const results = statements.map((s) =>
-          sqlite.prepare(s._sql).run(...s._args),
-        );
-        sqlite.exec("COMMIT");
-        return results;
-      } catch (e) {
-        sqlite.exec("ROLLBACK");
-        throw e;
-      }
-    },
-    sqlite,
-  };
-}
+const database = () => openDatabase(":memory:");
 const call = (db, path, method = "GET", data, key = "") =>
   handleAPI(
     new Request("https://feedwise.test/api/" + path, {
@@ -303,12 +267,14 @@ test("short feedback, neutral/mixed labels and two identical student comments pe
 test("schema upgrade retains existing comments, predictions and all human review history", () => {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys=ON");
-  const migrations = readdirSync(new URL("../drizzle/", import.meta.url))
+  const migrations = readdirSync(
+    new URL("../database/migrations/", import.meta.url),
+  )
     .filter((f) => f.endsWith(".sql"))
     .sort();
   sqlite.exec(
     readFileSync(
-      new URL("../drizzle/" + migrations[0], import.meta.url),
+      new URL("../database/migrations/" + migrations[0], import.meta.url),
       "utf8",
     ),
   );
@@ -318,7 +284,10 @@ test("schema upgrade retains existing comments, predictions and all human review
   for (const filename of migrations.slice(1)) {
     sqlite.exec("BEGIN");
     sqlite.exec(
-      readFileSync(new URL("../drizzle/" + filename, import.meta.url), "utf8"),
+      readFileSync(
+        new URL("../database/migrations/" + filename, import.meta.url),
+        "utf8",
+      ),
     );
     sqlite.exec("COMMIT");
   }
