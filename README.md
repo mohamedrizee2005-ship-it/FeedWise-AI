@@ -1,86 +1,100 @@
-# FeedWise AI — Anonymous Student Feedback & Teaching Improvement (Educational Prototype)
+# FeedWise AI
 
-FeedWise AI is a **local Streamlit + SQLite** project with three portals:
+A classroom feedback app: a lecturer creates a link, students submit without an account, and the lecturer privately reviews the results.
 
-- **Student** (`http://localhost:8501`): choose an active course and submit text feedback without a student login.
-- **Lecturer** (`http://localhost:8502`): sign in, see **only assigned courses** and authorized comments, view a demonstration sentiment model, issues, recommendations, charts, and save human sentiment corrections.
-- **Administrator** (`http://localhost:8503`): sign in, create/archive courses, create/enable/disable lecturer accounts, assign/revoke course access.
+**[Open FeedWise](https://feedwise-classroom.mohamedrizny5002.chatgpt.site)**
 
-**Warning:** Anonymous *form* does not guarantee anonymous *feedback*. Free-text can identify a student. No production deployment or real student feedback is recommended without privacy review, security hardening, institutional permission, proper consent and a data retention policy. The sentiment model uses a small, authored example dataset and is **not validated** for real university use.
+## Use it
 
-## Fast setup — Windows 11 + VS Code
+1. Enter a class title and an optional question. Select **Create feedback link**.
+2. Select **Save private results link**. Keep that file/bookmark private; it is your access to this class's results.
+3. Copy the separate **Student link** and share it with your class.
+4. Students submit a comment and an optional 1–5 rating.
+5. Open the private link to see sentiment, selected comments, topics and responses. Review/correct labels, search/filter, export CSV, or close/reopen feedback.
 
-1. Extract the ZIP. Open the `FeedWise-AI` folder in VS Code.
-2. Install Python 3.11–3.14 and make sure `py` or `python` works on the computer.
-3. Double-click **`01_FIRST_SETUP.bat`**. This creates `.venv`, installs requirements, creates the SQLite database, trains the *demo* ML model, and asks you to create the **first administrator**. Admin password typed into terminal is hidden. Never share it.
-4. Double-click **`RUN_ADMIN.bat`** to manage courses and lecturer accounts. Create a lecturer and assign a course.
-5. Double-click **`RUN_STUDENT.bat`** and **`RUN_LECTURER.bat`** (separate windows). Lecturer credentials come from the Admin Dashboard.
-6. Keep the terminal windows open while using the web apps. Each site is bound to **127.0.0.1**, not your whole network.
+No Admin portal, passwords, student registration or ChatGPT connection is required. Anyone with a student link can submit; anyone with a private results link can manage that class. A private-link model does not verify that a person is a lecturer or guarantee one submission per student. No recovery account exists.
 
-Alternative terminal commands (inside the project folder):
+## Download and run in VS Code
 
-```powershell
-py -3 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe setup.py
-.venv\Scripts\python.exe create_admin.py
-.venv\Scripts\python.exe -m streamlit run admin_app.py --server.address 127.0.0.1 --server.port 8503
+Use **Code → Download ZIP**, extract it, and open the extracted folder containing `package.json`. Use Node.js **24** (tested). Python is optional: the trained web model is included.
+
+On Windows, run `FIRST_SETUP.bat` once, then `RUN_FEEDWISE.bat`. Or use the terminal from the repository root:
+
+```sh
+npm ci
+npm run prepare:local
+npm run dev
 ```
 
-Other app filenames: `student_app.py` (8501), `lecturer_app.py` (8502).
+Open the localhost URL printed in the terminal. Keep the terminal running. The first setup builds the app and applies pending migrations to a local D1 database; it does not log in, deploy or change the hosted database. Subsequent schema updates: run `npm run prepare:local` again; already tracked local migrations are skipped.
 
-## Fresh database, not an automatic migration
+Detailed instructions and common errors: [Getting started](docs/GETTING_STARTED.md). Hosting your own copy: [Free hosting guide](docs/HOSTING.md).
 
-This ZIP **does not contain your earlier database or old feedback**. The new project uses `data/feedwise.db` and **numeric `course_id` foreign keys**, unlike the original prototype's `feedback.course` string columns. **Do not overwrite or delete your original `feedwise.db`**; this project starts a new, separate database. If historical data must be migrated, first back up both databases and write/test a dedicated migration. Avoid copying the old DB into `data/` because schemas differ.
+## What is included
 
-`setup.py` preserves existing tables/rows in this new schema but retrains its demo model when run again.
+- Focused submission form, plain system typography, navy accents, responsive layouts and no decorative imagery or marketing sections.
+- Private lecturer results: counts, average rating, sentiment distribution, representative comments, keyword topics, search, filtering, pagination, CSV and review history.
+- Durable hosted D1 storage; local development has its own separate database.
+- Independent random public/private keys, private-key digest storage, parameterized SQL and session checks on the server.
+- Short comments such as “very good” are valid. Different students can submit the same words; browser receipts prevent accidental retry duplicates.
+- A three-class English word + character TF-IDF / Logistic Regression model. Typographical variants can share character features.
+- A separate mixed-opinion clause heuristic and a narrow “not bad” idiom rule. Unsupported scripts are retained for human review.
+- No paid AI API, API key or network AI call at prediction time.
 
-## Development and testing
+The “What worked / What to improve” view selects actual comments, alongside sentiment and keyword counts. It is an extractive overview, not a Gemini-generated paragraph. Comments are not silently sent to a third-party AI provider.
 
-```powershell
-.venv\Scripts\python.exe -m pytest -q
-```
+## Measured AI results
 
-Test the full flow: Admin create course → Admin create lecturer → assign → Student submit → Lecturer view / correct → Dashboard counts update → Admin revoke access → Lecturer no longer sees course.
+The new corpus contains **5,856 normalized unique comments**: 2,877 student-feedback comments from NLPC-UOM and 2,979 additional general sentiment examples from UCI. It replaces the deployed 40-row binary model. There are **4,684 training** and **1,172 held-out** rows; duplicates are resolved before splitting.
 
-### File guide
+| Evaluation of the learned three-class model | Result |
+|---|---:|
+| Combined held-out accuracy | 80.80% |
+| Student-feedback held-out accuracy (576 comments) | 77.78% |
+| Student-feedback macro F1 | 0.7231 |
+| Combined majority-label baseline | 55.03% |
+| Simulated single-character deletion accuracy | 79.18% |
 
-| File | Purpose |
+These are offline corpus results, not guaranteed classroom accuracy. The old 25% five-fold demo score used a different dataset and protocol, so it is not a controlled before/after benchmark. Neutral recall remains weaker; Tamil, Sinhala, romanized language, sarcasm, new domains and real-world misspellings need further evaluation. Mixed/idiom rules are outside the three-class benchmark. A probability is a model score, not “percent correct”.
+
+[Training, source data, limitations and retraining](docs/AI_TRAINING.md) · [Machine-readable metrics](docs/model-evaluation.json) · [Dataset attribution](THIRD_PARTY_NOTICES.md)
+
+## Code map
+
+| Path | Responsibility |
 |---|---|
-| `admin_app.py` | Admin web portal and account/course management |
-| `student_app.py` | Student feedback submission |
-| `lecturer_app.py` | Authorized lecturer view and human correction |
-| `database.py` | Database schema, queries, permission checks |
-| `security.py` | Password hashing and verification (PBKDF2) |
-| `ml.py` | Demo TF-IDF + Logistic Regression model |
-| `insights.py` | Keyword issue tags and template recommendations |
-| `training_data.csv` | Small demonstration training dataset |
-| `setup.py` | Create schema, default courses and train model |
-| `create_admin.py` | Local one-time first admin bootstrap |
-| `config.py` | Config constants and file paths |
-| `tests/` | Functional tests for data access and security guards |
-| `docs/PROJECT_GUIDE.md` | System architecture, limitation and viva notes |
+| `app/page.tsx` | Create form, student form, lecturer results and review dialog |
+| `app/globals.css` | Responsive styling, focus and readable layout |
+| `app/api/[...path]/route.ts` | Worker API entrypoints |
+| `lib/service.mjs` | Input validation, session authorization and database operations |
+| `lib/inference.mjs` | Server-only TF-IDF inference and documented rules |
+| `lib/feedback.mjs` | Shared sentiment counts, topic matching, selected comments and safe CSV |
+| `lib/model.json` | Numerical trained model; no Python runtime needed on the server |
+| `python/train_feedback.py` | Download, clean, split, train, evaluate and export the current web model |
+| `db/schema.ts`, `drizzle/` | Five-table SQLite schema and immutable migration history |
+| `scripts/migrate-local.mjs` | Apply pending local D1 migrations without account sign-in |
+| `self-host/` | Configure an independent Cloudflare Workers + D1 deployment |
+| `tests/` | Real SQLite API tests, migration preservation and sklearn/JS parity |
+| `python/app.py` | Preserved **legacy** Streamlit learning prototype; separate model/database |
+| `docs/` | Setup, architecture, development record, testing, hosting and model explanation |
 
-## ML caveats
+## Validate
 
-The model is a supervised **TF-IDF + Logistic Regression** model trained from `training_data.csv`. The returned maximum probability is a model output, **not a calibrated accuracy or real-world reliability score**. The 70% review flag is a heuristic. Human-corrected sentiment always takes priority in dashboard aggregations. Issue tagging and recommendations are **keyword/rule based**, not another AI model. Labels are limited to positive/negative; neutral/mixed feedback is not properly represented.
+```sh
+npm run check
+npm test
+npm run build
+```
 
-## Security limitations
+The web suite checks the real create/submit/review/close workflow, private-link isolation, SQL-shaped input, receipts, validation, CSV escaping, common typing variants, numerical parity and preservation of records during schema upgrades. GitHub Actions also runs the 20 preserved Python prototype tests.
 
-- Admin password creation is local CLI only, not public self-registration.
-- Lecturer access to feedback and write corrections is checked again in SQL.
-- The apps run on localhost by default, not on a public server.
-- No MFA, session expiration policy, login throttling, password reset, teacher self-service password changes, anti-spam, abuse controls, personally identifying information filter, or moderation.
-- Streamlit session state is a local prototype mechanism, not a substitute for a production-grade auth system.
-- Student submissions are not personally authenticated, so repeated submissions are possible.
-- Raw comments can identify students. The application currently does **not** claim privacy compliance or guaranteed anonymity.
+## Data and operating limits
 
-## GitHub publishing
+- No name, student ID, email or IP address is stored as a feedback field. Free-text and hosting logs can still identify people; anonymity is not guaranteed.
+- Feedback is 2–2,000 characters, optional rating 1–5, maximum 1,000 responses per class. There is no account identity check, automated moderation or deletion/retention scheduler.
+- Public root visitors can create their own isolated class. Larger public deployments need abuse controls and load testing.
+- Original AI suggestions and model version are retained; human corrections override displayed labels and append history. Corrections do not automatically retrain the model. Older submissions keep their original model prediction.
+- GitHub hosts the source, not the running server/database. Local, managed Site and independently hosted databases are separate.
+- The included React/Vinext runtime contains framework scaffolding; the application-specific entrypoints are listed above. Vinext is beta, so dependency updates should be tested before deployment.
 
-1. Run tests and confirm the three portals work.
-2. **Never publish `data/feedwise.db`, `.venv/`, `models/`, passwords, or real feedback.** `.gitignore` excludes them.
-3. Initialize a Git repository (or use VS Code Source Control), then inspect the staged files before committing.
-4. Push to a new GitHub repository. Include `README.md` and `docs/PROJECT_GUIDE.md`.
-5. Do not deploy the three apps publicly without security and privacy work.
-
-This is an educational project; it should not be described as a proven, fully secure or production-ready university system.
+No PDF was generated for this revision. The code map, source index, model report and development log are retained for the requested later line-by-line documentation.

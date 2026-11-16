@@ -1,0 +1,24 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> feedwise-ai@1.0.0 test
+> node --test tests/*.test.mjs
+
+✔ web inference exactly matches exported sklearn prediction/probability cases (12.811067ms)
+✔ multi-topic matches and CSV formula escaping (3.639876ms)
+✔ full no-login create -> submit -> private dashboard -> review -> close/reopen (43.149184ms)
+✔ public keys and other review keys cannot read or change someone else’s responses (14.092539ms)
+✔ receipts are idempotent; different students may submit identical comments (7.596301ms)
+✔ validation preserves storage and SQL-shaped strings are data (7.413065ms)
+✔ each manual review appends history while current label changes (18.509416ms)
+✔ reject cross-origin writes and invalid JSON; no error details leak (4.491931ms)
+✔ common typing mistakes, negation, mixed clauses and unsupported scripts (3.202307ms)
+✔ short feedback, neutral/mixed labels and two identical student comments persist (10.199856ms)
+✔ schema upgrade retains existing comments, predictions and all human review history (3.765205ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 316.526738
