@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.env
+.streamlit/secrets.toml
+*.db
+*.db-*
+data/*
+!data/.gitkeep
+models/*
+!models/.gitkeep
+*.pkl
+*.joblib
+.DS_Store
