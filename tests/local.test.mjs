@@ -41,7 +41,7 @@ test("local database and private access survive a close/reopen without replaying
     assert.equal((await res.json()).session.title, "Local persistence test");
     assert.equal(
       db.sqlite.prepare("SELECT COUNT(*) n FROM schema_migrations").get().n,
-      2,
+      3,
     );
   } finally {
     db?.close();

@@ -10,3 +10,9 @@ __pycache__/
 .env.*
 *.log
 .DS_Store
+
+# Private lecturer exports and access links
+feedwise-corrections*.jsonl
+FeedWise-responses*.csv
+FeedWise-private-review-link*.txt
+training/private/

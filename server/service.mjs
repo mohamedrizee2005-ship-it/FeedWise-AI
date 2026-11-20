@@ -1,9 +1,15 @@
+import { MODEL_EVALUATION, LABELS } from "./inference.mjs";
+
 import {
-  predict,
-  MODEL_VERSION,
-  MODEL_EVALUATION,
-  LABELS,
-} from "./inference.mjs";
+  analyseForClass,
+  analysisStatement,
+  readAnalysis,
+  localAnalysis,
+  HYBRID_VERSION,
+} from "./analysis.mjs";
+import { correctionExamples } from "./learning.mjs";
+import { localAI } from "./local-ai.mjs";
+import { textKey, withHumanLabel } from "../shared/analysis.mjs";
 
 const headers = {
   "Content-Type": "application/json; charset=utf-8",
@@ -46,7 +52,7 @@ async function body(request) {
     throw new Error("Invalid request.");
   return data;
 }
-export async function handleAPI(request, db) {
+export async function handleAPI(request, db, { ai = localAI } = {}) {
   if (!db)
     return response(
       { error: "Feedback storage is temporarily unavailable." },
@@ -141,7 +147,8 @@ export async function handleAPI(request, db) {
           409,
         );
       const id = crypto.randomUUID(),
-        ai = predict(comment);
+        ai = localAnalysis(comment);
+      const analysis = await analyseForClass(db, session.id, comment, ai);
       await db.batch([
         db
           .prepare(
@@ -163,7 +170,8 @@ export async function handleAPI(request, db) {
           .prepare(
             "INSERT INTO predictions(feedback_id,model_version,label,probability) SELECT id,?,?,? FROM feedback WHERE id=?",
           )
-          .bind(MODEL_VERSION, ai.label, ai.probability, id),
+          .bind(HYBRID_VERSION, ai.label, ai.baselineScore, id),
+        analysisStatement(db, id, analysis),
       ]);
       const received = await db
         .prepare("SELECT id FROM feedback WHERE receipt=? AND session_id=?")
@@ -179,7 +187,16 @@ export async function handleAPI(request, db) {
             409,
           );
     }
-    if (["/api/dashboard", "/api/session", "/api/review"].includes(path)) {
+    if (
+      [
+        "/api/dashboard",
+        "/api/session",
+        "/api/review",
+        "/api/ai",
+        "/api/analyse",
+        "/api/training-data",
+      ].includes(path)
+    ) {
       const session = await owner(request, db);
       if (!session)
         return response(
@@ -193,23 +210,128 @@ export async function handleAPI(request, db) {
         const { results: feedback } = await db
           .prepare(
             `SELECT f.id,f.comment,f.rating,f.created_at,r.label human_label,
-          p.label ai_label,p.probability,p.model_version FROM feedback f LEFT JOIN reviews r ON r.feedback_id=f.id
-          LEFT JOIN predictions p ON p.feedback_id=f.id WHERE f.session_id=? ORDER BY f.created_at DESC,f.id DESC`,
+          p.label ai_label,p.probability,p.model_version,a.details analysis_details FROM feedback f LEFT JOIN reviews r ON r.feedback_id=f.id
+          LEFT JOIN predictions p ON p.feedback_id=f.id LEFT JOIN feedback_analyses a ON a.feedback_id=f.id WHERE f.session_id=? ORDER BY f.created_at DESC,f.id DESC`,
           )
           .bind(session.id)
           .all();
         const { results: history } = await db
           .prepare(
-            "SELECT h.feedback_id,h.label,h.created_at FROM review_history h JOIN feedback f ON f.id=h.feedback_id WHERE f.session_id=? ORDER BY h.created_at DESC,h.id DESC LIMIT 1000",
+            "SELECT h.feedback_id,h.label,h.created_at FROM review_history h JOIN feedback f ON f.id=h.feedback_id WHERE f.session_id=? ORDER BY h.created_at DESC,h.rowid DESC LIMIT 1000",
           )
           .bind(session.id)
           .all();
+        const examples = await correctionExamples(db, session.id);
+        const memory = new Map(
+          examples.map((row) => [row.text_key, row.label]),
+        );
+        const analysed = feedback.map(({ analysis_details, ...row }) => {
+          const saved = readAnalysis({ ...row, analysis_details });
+          const remembered = memory.get(textKey(row.comment));
+          const label = row.human_label || remembered;
+          const analysis = label
+            ? withHumanLabel(
+                saved,
+                row.comment,
+                label,
+                row.human_label ? "human" : "correction",
+              )
+            : saved;
+          return { ...row, analysis };
+        });
         return response({
           session,
-          feedback,
+          feedback: analysed,
           history,
-          model: MODEL_EVALUATION,
+          learning: { examples: examples.length },
+          model: { ...MODEL_EVALUATION, currentVersion: HYBRID_VERSION },
         });
+      }
+      if (path === "/api/ai" && request.method === "GET")
+        return response(await ai.status());
+      if (path === "/api/training-data" && request.method === "GET") {
+        const examples = await correctionExamples(db, session.id);
+        return new Response(
+          examples
+            .map((row) =>
+              JSON.stringify({
+                text: row.original_text,
+                label: row.label,
+                group: session.id,
+                reviewed_at: row.updated_at,
+              }),
+            )
+            .join("\n") + (examples.length ? "\n" : ""),
+          {
+            headers: {
+              ...headers,
+              "Content-Type": "application/x-ndjson; charset=utf-8",
+              "Content-Disposition":
+                'attachment; filename="feedwise-corrections.jsonl"',
+            },
+          },
+        );
+      }
+      if (path === "/api/analyse" && request.method === "POST") {
+        const data = await body(request);
+        const row = await db
+          .prepare(
+            "SELECT f.id,f.comment,r.label human_label,a.details analysis_details FROM feedback f LEFT JOIN reviews r ON r.feedback_id=f.id LEFT JOIN feedback_analyses a ON a.feedback_id=f.id WHERE f.id=? AND f.session_id=?",
+          )
+          .bind(data.feedbackId || "", session.id)
+          .first();
+        if (!row)
+          return response(
+            { error: "That response is not part of this lecture." },
+            403,
+          );
+        const examples = await correctionExamples(db, session.id);
+        let result;
+        const known = examples.find((x) => x.text_key === textKey(row.comment));
+        const saved = readAnalysis(row);
+        if (!row.human_label && !known && saved.source === "ollama")
+          return response({ analysis: saved });
+        if (row.human_label || known)
+          result = withHumanLabel(
+            saved,
+            row.comment,
+            row.human_label || known.label,
+            "correction",
+          );
+        else {
+          try {
+            result = await ai.analyse(row.comment, examples);
+          } catch (error) {
+            if (error?.message === "INVALID_AI_OUTPUT" || error instanceof SyntaxError)
+              return response({error: "The model could not link its answer to this comment. The existing analysis is available for review.", code: "ai_evidence"}, 422);
+            const busy = error?.message === "LOCAL_AI_BUSY";
+            return response(
+              {
+                error: busy
+                  ? "Local AI is busy. Wait for the current analysis."
+                  : "Local AI could not finish. Your feedback is safe; check that Ollama and the selected model are running.",
+                code: busy ? "ai_busy" : "ai_unavailable",
+              },
+              busy ? 409 : 503,
+            );
+          }
+          const current = await db
+            .prepare("SELECT label FROM reviews WHERE feedback_id=?")
+            .bind(row.id)
+            .first();
+          const latest = (await correctionExamples(db, session.id)).find(
+            (x) => x.text_key === textKey(row.comment),
+          );
+          if (current || latest)
+            result = withHumanLabel(
+              result,
+              row.comment,
+              current?.label || latest.label,
+              "correction",
+            );
+        }
+        await analysisStatement(db, row.id, result).run();
+        return response({ analysis: result });
       }
       if (path === "/api/session" && request.method === "PATCH") {
         const data = await body(request);
@@ -229,7 +351,9 @@ export async function handleAPI(request, db) {
         if (!LABELS.includes(data.label))
           return response({ error: "Choose a valid sentiment label." }, 400);
         const allowed = await db
-          .prepare("SELECT id FROM feedback WHERE id=? AND session_id=?")
+          .prepare(
+            "SELECT f.id,f.comment,a.details AS analysis_details FROM feedback f LEFT JOIN feedback_analyses a ON a.feedback_id=f.id WHERE f.id=? AND f.session_id=?",
+          )
           .bind(data.feedbackId || "", session.id)
           .first();
         if (!allowed)
@@ -248,6 +372,27 @@ export async function handleAPI(request, db) {
               "INSERT INTO review_history(id,feedback_id,label) VALUES (?,?,?)",
             )
             .bind(crypto.randomUUID(), allowed.id, data.label),
+          db
+            .prepare(
+              `INSERT INTO correction_memory(session_id,text_key,original_text,label) VALUES (?,?,?,?)
+            ON CONFLICT(session_id,text_key) DO UPDATE SET original_text=excluded.original_text,label=excluded.label,revision=correction_memory.revision+1,updated_at=CURRENT_TIMESTAMP`,
+            )
+            .bind(
+              session.id,
+              textKey(allowed.comment),
+              allowed.comment,
+              data.label,
+            ),
+          analysisStatement(
+            db,
+            allowed.id,
+            withHumanLabel(
+              readAnalysis(allowed),
+              allowed.comment,
+              data.label,
+              "human",
+            ),
+          ),
         ]);
         return response({ saved: true });
       }

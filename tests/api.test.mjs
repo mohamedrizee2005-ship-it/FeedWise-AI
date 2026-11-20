@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { textKey } from "../shared/analysis.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { openDatabase } from "../server/database.mjs";
@@ -262,10 +263,11 @@ test("short feedback, neutral/mixed labels and two identical student comments pe
   assert.equal(result.feedback.length, 5);
   assert.equal(result.model.samples, 4684);
   assert.ok(result.feedback.some((r) => r.ai_label === "mixed"));
-  assert.ok(result.feedback.some((r) => r.ai_label === "unreviewed"));
+  assert.equal(result.feedback.find((r) => r.comment === "இந்த வகுப்பு நல்லது").analysis.label, "positive");
 });
 test("schema upgrade retains existing comments, predictions and all human review history", () => {
   const sqlite = new DatabaseSync(":memory:");
+  sqlite.function("feedwise_text_key", { deterministic: true }, textKey);
   sqlite.exec("PRAGMA foreign_keys=ON");
   const migrations = readdirSync(
     new URL("../database/migrations/", import.meta.url),
@@ -307,6 +309,9 @@ test("schema upgrade retains existing comments, predictions and all human review
     sqlite.prepare("SELECT comment FROM feedback").get().comment,
     "Original feedback comment",
   );
+  const imported = sqlite.prepare("SELECT text_key,label FROM correction_memory").get();
+  assert.equal(imported.text_key, "original feedback comment");
+  assert.equal(imported.label, "mixed");
   assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   sqlite.exec(
     "INSERT INTO feedback(id,session_id,comment,receipt) VALUES('f2','s','ok','receipt2'); INSERT INTO predictions VALUES('f2','new-model','neutral',.6)",

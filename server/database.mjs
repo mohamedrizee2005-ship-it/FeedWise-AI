@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { textKey } from "../shared/analysis.mjs";
 
 const migrations = new URL("../database/migrations/", import.meta.url);
 
@@ -10,6 +11,7 @@ export function openDatabase(filename) {
     mkdirSync(path.dirname(path.resolve(filename)), { recursive: true });
   const sqlite = new DatabaseSync(filename);
   try {
+    sqlite.function("feedwise_text_key", { deterministic: true }, textKey);
     sqlite.exec(
       "PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;",
     );

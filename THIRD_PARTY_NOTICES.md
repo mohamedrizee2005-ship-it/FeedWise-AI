@@ -27,3 +27,12 @@ React, Vite, Lucide, TypeScript and scikit-learn retain their upstream licenses.
 The package lockfile identifies the JavaScript dependencies. Dataset authors
 retain the rights to their comments and annotations; FeedWise does not claim
 authorship of those datasets.
+
+## Optional local language model
+
+FeedWise can call Google's Gemma 3 4B through a separately installed Ollama
+runtime. Users download the model from its publisher's listing. The repository
+contains the adapter and runs without the optional model files.
+
+- Model listing and terms: https://ollama.com/library/gemma3:4b
+- Runtime and structured output documentation: https://docs.ollama.com/capabilities/structured-outputs
